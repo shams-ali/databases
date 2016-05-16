@@ -1,122 +1,35 @@
 var db = require('../db');
-
-
-
-var POST2 = 'insert into Rooms (name) values ("newroom")';
-
-var postMessage = 'insert into Messages (message, user_id, room_id) VALUES ("${message}", SELECT(id from Users where name="$(username)"), SELECT(id from Rooms where name="$(roomname)"))';
+var Promise = require('bluebird');
+Promise.promisifyAll(db);
 
 module.exports = {
   messages: {
-    get: function (req, cb) {
-      var reultsObject = {results: []};
-      const allMessages = `
-        SELECT *
-        FROM Messages
-      `;
-      const allUsers = `
-        SELECT *
-        FROM Users
-      `;
-      const allRooms = `
-        SELECT *
-        FROM Rooms
-      `;
+    get: function () {
+      return db.queryAsync('SELECT * FROM Messages').then((r)=>r);
 
     }, // a function which produces all the messages
-
-
-    post: function ({message, username, roomname} = {}, cb) {
-      validate(roomname);
-      console.log('message in post is: ', message);
-      console.log('username in post is: ', username);
-      console.log('roomname in post is: ', roomname);
-      const userQuery = `
-        SELECT id
-        FROM Users
-        WHERE name="${username}"
-      `;
-      const roomQuery = `
-      SELECT id
-      FROM Rooms
-      WHERE name="${roomname}"
-      `;
-
-
-
-      // console.log('userQuery is: ', userQuery);
-      // console.log('roomQuery is: ', roomQuery);
-      db.query(userQuery, (error, userRows) => {
-        console.log('userRows in message post is: ', userRows);
-        if (error) {
-          cb(error);
+    post: function (message, username, roomname) {
+      db.queryAsync(`SELECT id FROM Rooms WHERE name="${roomname}"`).then((roomRows) => {
+        if (roomRows.length === 0) {
+          db.queryAsync(`INSERT INTO Rooms (name) VALUES ("${roomname}")`);
         }
-        db.query(roomQuery, (error, roomRows) => {
-          console.log('roomRows in message post is: ', roomRows);
-          if (error) {
-            cb(error);
-          }
-          const insertQuery = `
-            INSERT INTO Messages (message, user_id, room_id)
-            VALUES ("${message}", ${userRows[0].id}, ${roomRows[0].id})
-            `;
-          db.query(insertQuery, cb);
-        });
-      });
-    } // a function which can be used to insert a message into the database
+      }).then(() => db.queryAsync(`INSERT INTO Messages (message, user_id, room_id) VALUES ("${message}", (SELECT id from Users where name="${username}"), (SELECT id from Rooms where name="${roomname}")`).then((r) => r));
+    }
+    // a function which can be used to insert a message into the database
   },
 
   users: {
     // Ditto as above.
     //
     get: function () {
-
+      return db.queryAsync('SELECT * FROM Users').then((r) => r);
     },
-    post: function (username, cb) {
-      const userQuery = `
-        SELECT id
-        FROM Users
-        WHERE name="${username}"
-      `;
-
-      db.query(userQuery, (error, userRows) => {
-        console.log('userRows in users post is: ', userRows);
-        if (error) {
-          cb(error);
-        }
-        console.log('userRows.length in users post is: ', userRows.length);
-        if (userRows.length === 0) {
-          const insertQuery = `
-              INSERT INTO Users (name)
-              VALUES ("${username}")
-            `;
-          db.query(insertQuery, cb);
-        }
+    post: function (username) {
+      return db.queryAsync(`INSERT INTO Users (name) VALUES ('${username}')`).then((r) => {
+        console.log('user created: ', username);
+        return r;
       });
     }
   }
 };
 //helper functions
-var validate = function (roomname) {
-  console.log('roomname in validate is: ', roomname);
-
-  const roomQuery = `
-    SELECT id
-    FROM Rooms
-    WHERE name="${roomname}"
-  `;
-
-  db.query(roomQuery, (error, roomRows) => {
-    console.log('roomRows in validate is: ', roomRows);
-    if (error) {
-      console.log('error in validate userQuery is: ', err);
-    }
-    if (roomRows.length === 0) {
-      const insertQuery = `
-        INSERT INTO Rooms (name)
-        VALUES ("${roomname}")
-      `;
-      db.query(insertQuery);
-    }
-  });
-};
